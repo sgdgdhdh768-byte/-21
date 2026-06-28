@@ -1,0 +1,712 @@
+- AutoBlock v5.6 MENU для The Strongest Battlegrounds
+-- prod. by kartal
+-- Добавлен Toggle Billboard в оба меню
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local VIM = game:GetService("VirtualInputManager")
+local Workspace = game:GetService("Workspace")
+local StarterGui = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
+
+-- ====== ID АНИМАЦИЙ ======
+local comboIDs = { 10480793962, 10480796021 }
+
+local allIDs = {
+	Saitama = { 10469493270, 10469630950, 10469639222, 10469643643, special = 10479335397 },
+	Garou = { 13532562418, 13532600125, 13532604085, 13294471966, special = 10479335397 },
+	Cyborg = { 13491635433, 13296577783, 13295919399, 13295936866, special = 10479335397 },
+	Sonic = { 13370310513, 13390230973, 13378751717, 13378708199, special = 13380255751 },
+	Metal = { 14004222985, 13997092940, 14001963401, 14136436157, special = 13380255751 },
+	Blade = { 15259161390, 15240216931, 15240176873, 15162694192, special = 13380255751 },
+	Tatsumaki = { 16515503507, 16515520431, 16515448089, 16552234590, special = 10479335397 },
+	Dragon = { 17889458563, 17889461810, 17889471098, 17889290569, special = 10479335397 },
+	Tech = { 123005629431309, 100059874351664, 104895379416342, 134775406437626, special = 10479335397 }
+}
+
+local skillIDs = {
+	[10468665991] = true, [10466974800] = true, [10471336737] = true, [12510170988] = true,
+	[12272894215] = true, [12296882427] = true, [12307656616] = true,
+	[101588604872680] = true, [105442749844047] = true, [109617620932970] = true, [131820095363270] = true,
+	[135289891173395] = true, [125955606488863] = true,
+	[12534735382] = true, [12502664044] = true, [12509505723] = true, [12618271998] = true, [12684390285] = true,
+	[13376869471] = true, [13294790250] = true, [13376962659] = true, [13501296372] = true, [13556985475] = true,
+	[145162735010] = true, [14046756619] = true, [14299135500] = true, [14351441234] = true,
+	[15290930205] = true, [15145462680] = true, [15295895753] = true, [15295336270] = true,
+	[16139108718] = true, [16515850153] = true, [16431491215] = true, [16597322398] = true, [16597912086] = true,
+	[17799224866] = true, [17838006839] = true, [17857788598] = true, [18179181663] = true,
+	[113166426814229] = true, [116753755471636] = true, [116153572280464] = true, [114095570398448] = true, [77509627104305] = true,
+}
+
+local allAttackAnimIDs = {}
+for _, id in ipairs(comboIDs) do allAttackAnimIDs[id] = "Combo" end
+for charName, data in pairs(allIDs) do
+	for key, id in pairs(data) do
+		if key == "special" then allAttackAnimIDs[id] = charName .. "_Special"
+		elseif type(id) == "number" then allAttackAnimIDs[id] = charName .. "_M" .. key end
+	end
+end
+for id, _ in pairs(skillIDs) do allAttackAnimIDs[id] = "Skill" end
+
+-- ====== КОНФИГ ======
+local Config = {
+	Enabled = true,
+	BlockKey = "F",
+	CheckDistance = 25,
+	AutoParry = false,
+	ParryWindow = 0.1,
+	UseAnimationDetect = true,
+	UseVelocityDetect = true,
+	LimbVelocityThreshold = 18,
+	BodyVelocityThreshold = 45,
+	DebugMode = false,
+	ShowAnimName = false,
+	BlockReleaseDelay = 0.25,
+	MenuVisible = true,
+	RightMenuVisible = false,
+	BillboardVisible = true
+}
+
+-- ====== ПЕРЕМЕННЫЕ ======
+local isBlocking = false
+local billboardGui = nil
+local statusText = nil
+local isInitialized = false
+local enemyJustLeft = false
+local enemyLeaveTime = 0
+
+-- ====== ФУНКЦИЯ ВЫВОДА ======
+local function chatMsg(msg)
+	if Config.DebugMode then
+		pcall(function()
+			StarterGui:SetCore("ChatMakeSystemMessage", {
+				Text = "[HRM] " .. msg,
+				Color = Color3.fromRGB(255, 100, 100),
+				Font = Enum.Font.Code,
+				FontSize = Enum.FontSize.Size14
+			})
+		end)
+	end
+	print("[HRM]", msg)
+end
+
+-- ====== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ МЕНЮ ======
+local function createStyledButton(parent, size, position, text, color, callback)
+	local button = Instance.new("TextButton")
+	button.Size = size
+	button.Position = position
+	button.BackgroundColor3 = color
+	button.TextColor3 = Color3.fromRGB(255, 255, 255)
+	button.Text = text
+	button.Font = Enum.Font.Code
+	button.TextSize = 12
+	button.BorderSizePixel = 0
+	button.AutoButtonColor = false
+	button.Parent = parent
+
+	button.MouseButton1Click:Connect(callback)
+	button.MouseEnter:Connect(function()
+		button.BackgroundColor3 = Color3.fromRGB(
+			math.min(color.R * 255 + 30, 255) / 255,
+			math.min(color.G * 255 + 30, 255) / 255,
+			math.min(color.B * 255 + 30, 255) / 255
+		)
+	end)
+	button.MouseLeave:Connect(function()
+		button.BackgroundColor3 = color
+	end)
+	return button
+end
+
+-- ====== ГЛОБАЛЬНАЯ ФУНКЦИЯ ОБНОВЛЕНИЯ БИЛБОРДА ======
+local function toggleBillboard()
+	Config.BillboardVisible = not Config.BillboardVisible
+	if billboardGui then
+		billboardGui.Enabled = Config.BillboardVisible
+	end
+	chatMsg("📋 Billboard: " .. (Config.BillboardVisible and "ON" or "OFF"))
+end
+
+-- ====== МЕНЮ ЛЕВОЕ (основное) ======
+local function createMainMenu()
+	local ScreenGui = Instance.new("ScreenGui")
+	ScreenGui.Name = "HRM_Menu"
+	ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	ScreenGui.ResetOnSpawn = false
+
+	local MainFrame = Instance.new("Frame")
+	MainFrame.Name = "MainFrame"
+	MainFrame.Size = UDim2.new(0, 230, 0, 0)
+	MainFrame.Position = UDim2.new(0.8, 0, 0.2, 0)
+	MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	MainFrame.BorderSizePixel = 0
+	MainFrame.Active = true
+	MainFrame.Draggable = true
+	MainFrame.ClipsDescendants = true
+	MainFrame.Parent = ScreenGui
+
+	-- Заголовок
+	local Title = Instance.new("TextLabel")
+	Title.Size = UDim2.new(1, 0, 0, 32)
+	Title.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+	Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	Title.Text = "⚡ HRM v5.6 MENU"
+	Title.Font = Enum.Font.Code
+	Title.TextSize = 15
+	Title.BorderSizePixel = 0
+	Title.Parent = MainFrame
+
+	local yOffset = 35
+	local function createToggle(name, default, callback)
+		local ToggleFrame = Instance.new("Frame")
+		ToggleFrame.Size = UDim2.new(1, -12, 0, 26)
+		ToggleFrame.Position = UDim2.new(0, 6, 0, yOffset)
+		ToggleFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+		ToggleFrame.BorderSizePixel = 0
+		ToggleFrame.Parent = MainFrame
+
+		local Label = Instance.new("TextLabel")
+		Label.Size = UDim2.new(0, 140, 1, 0)
+		Label.Position = UDim2.new(0, 6, 0, 0)
+		Label.BackgroundTransparency = 1
+		Label.TextColor3 = Color3.fromRGB(200, 200, 200)
+		Label.Text = name
+		Label.Font = Enum.Font.Code
+		Label.TextSize = 12
+		Label.TextXAlignment = Enum.TextXAlignment.Left
+		Label.Parent = ToggleFrame
+
+		local Button = Instance.new("TextButton")
+		Button.Size = UDim2.new(0, 52, 0, 20)
+		Button.Position = UDim2.new(1, -58, 0.5, -10)
+		Button.BackgroundColor3 = default and Color3.fromRGB(0, 160, 0) or Color3.fromRGB(160, 0, 0)
+		Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		Button.Text = default and "ON" or "OFF"
+		Button.Font = Enum.Font.Code
+		Button.TextSize = 12
+		Button.BorderSizePixel = 0
+		Button.AutoButtonColor = false
+		Button.Parent = ToggleFrame
+
+		Button.MouseButton1Click:Connect(function()
+			default = not default
+			Button.Text = default and "ON" or "OFF"
+			Button.BackgroundColor3 = default and Color3.fromRGB(0, 160, 0) or Color3.fromRGB(160, 0, 0)
+			callback(default)
+		end)
+
+		yOffset = yOffset + 28
+		return {
+			SetValue = function(v)
+				default = v
+				Button.Text = default and "ON" or "OFF"
+				Button.BackgroundColor3 = default and Color3.fromRGB(0, 160, 0) or Color3.fromRGB(160, 0, 0)
+			end
+		}
+	end
+
+	local function createSlider(name, min, max, default, step, suffix, callback)
+		local SliderFrame = Instance.new("Frame")
+		SliderFrame.Size = UDim2.new(1, -12, 0, 48)
+		SliderFrame.Position = UDim2.new(0, 6, 0, yOffset)
+		SliderFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+		SliderFrame.BorderSizePixel = 0
+		SliderFrame.Parent = MainFrame
+
+		local Label = Instance.new("TextLabel")
+		Label.Size = UDim2.new(1, -8, 0, 16)
+		Label.Position = UDim2.new(0, 4, 0, 2)
+		Label.BackgroundTransparency = 1
+		Label.TextColor3 = Color3.fromRGB(180, 180, 180)
+		Label.Text = name .. ": " .. default .. suffix
+		Label.Font = Enum.Font.Code
+		Label.TextSize = 11
+		Label.TextXAlignment = Enum.TextXAlignment.Left
+		Label.Parent = SliderFrame
+
+		local sliderValue = default
+
+		local Minus10 = createStyledButton(SliderFrame, UDim2.new(0, 22, 0, 18), UDim2.new(0, 0, 0, 22),
+			"<<", Color3.fromRGB(80, 40, 40),
+			function() local v = math.max(min, sliderValue - (step * 10)); sliderValue = v; Label.Text = name .. ": " .. v .. suffix; callback(v) end)
+		local Minus = createStyledButton(SliderFrame, UDim2.new(0, 22, 0, 18), UDim2.new(0, 24, 0, 22),
+			"<", Color3.fromRGB(60, 60, 60),
+			function() local v = math.max(min, sliderValue - step); sliderValue = v; Label.Text = name .. ": " .. v .. suffix; callback(v) end)
+
+		local ValueLabel = Instance.new("TextLabel")
+		ValueLabel.Size = UDim2.new(1, -96, 0, 18)
+		ValueLabel.Position = UDim2.new(0, 48, 0, 22)
+		ValueLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+		ValueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		ValueLabel.Text = tostring(default) .. suffix
+		ValueLabel.Font = Enum.Font.Code
+		ValueLabel.TextSize = 12
+		ValueLabel.BorderSizePixel = 0
+		ValueLabel.Parent = SliderFrame
+
+		local Plus = createStyledButton(SliderFrame, UDim2.new(0, 22, 0, 18), UDim2.new(1, -48, 0, 22),
+			">", Color3.fromRGB(60, 60, 60),
+			function() local v = math.min(max, sliderValue + step); sliderValue = v; Label.Text = name .. ": " .. v .. suffix; ValueLabel.Text = tostring(v) .. suffix; callback(v) end)
+		local Plus10 = createStyledButton(SliderFrame, UDim2.new(0, 22, 0, 18), UDim2.new(1, -24, 0, 22),
+			">>", Color3.fromRGB(40, 80, 40),
+			function() local v = math.min(max, sliderValue + (step * 10)); sliderValue = v; Label.Text = name .. ": " .. v .. suffix; ValueLabel.Text = tostring(v) .. suffix; callback(v) end)
+
+		yOffset = yOffset + 50
+		return {
+			SetValue = function(v)
+				v = math.clamp(v, min, max)
+				sliderValue = v
+				Label.Text = name .. ": " .. v .. suffix
+				ValueLabel.Text = tostring(v) .. suffix
+			end
+		}
+	end
+
+	local toggles = {}
+	toggles.Enable = createToggle("AutoBlock", Config.Enabled, function(v) Config.Enabled = v; chatMsg("🟢 " .. (v and "ON" or "OFF")) end)
+	toggles.Parry = createToggle("AutoParry", Config.AutoParry, function(v) Config.AutoParry = v; chatMsg("🎯 Пари: " .. (v and "ON" or "OFF")) end)
+	toggles.AnimDetect = createToggle("AnimDetect", Config.UseAnimationDetect, function(v) Config.UseAnimationDetect = v end)
+	toggles.VelDetect = createToggle("VelDetect", Config.UseVelocityDetect, function(v) Config.UseVelocityDetect = v end)
+	toggles.Debug = createToggle("Debug", Config.DebugMode, function(v) Config.DebugMode = v; chatMsg("🐛 " .. (v and "ON" or "OFF")) end)
+
+	-- Разделитель
+	local Separator = Instance.new("Frame")
+	Separator.Size = UDim2.new(1, -12, 0, 1)
+	Separator.Position = UDim2.new(0, 6, 0, yOffset)
+	Separator.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	Separator.BorderSizePixel = 0
+	Separator.Parent = MainFrame
+	yOffset = yOffset + 4
+
+	local sliders = {}
+	sliders.Distance = createSlider("Distance", 5, 50, Config.CheckDistance, 1, " studs", function(v)
+		Config.CheckDistance = v
+	end)
+	sliders.ReleaseDelay = createSlider("ReleaseDelay", 1, 50, math.floor(Config.BlockReleaseDelay * 100 + 0.5), 1, " ms", function(v)
+		Config.BlockReleaseDelay = v / 100
+	end)
+
+	-- Разделитель
+	local Separator2 = Instance.new("Frame")
+	Separator2.Size = UDim2.new(1, -12, 0, 1)
+	Separator2.Position = UDim2.new(0, 6, 0, yOffset)
+	Separator2.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	Separator2.BorderSizePixel = 0
+	Separator2.Parent = MainFrame
+	yOffset = yOffset + 4
+
+	-- Кнопка Billboard
+	local billBtn = createStyledButton(MainFrame, UDim2.new(1, -12, 0, 24), UDim2.new(0, 6, 0, yOffset),
+		"📋 Billboard: ON", Color3.fromRGB(45, 45, 65), function()
+			toggleBillboard()
+			billBtn.Text = "📋 Billboard: " .. (Config.BillboardVisible and "ON" or "OFF")
+		end)
+	yOffset = yOffset + 26
+
+	-- Кнопка скрытия
+	local HideButton = createStyledButton(MainFrame, UDim2.new(1, -12, 0, 24), UDim2.new(0, 6, 0, yOffset),
+		"Скрыть меню (P)", Color3.fromRGB(50, 50, 50), function()
+			MainFrame.Visible = false
+			Config.MenuVisible = false
+		end)
+
+	MainFrame.Size = UDim2.new(0, 230, 0, yOffset + 34)
+	return {Frame = MainFrame, Toggles = toggles, Sliders = sliders, BillboardButton = billBtn}
+end
+
+-- ====== НОВОЕ МЕНЮ СПРАВА (RightShift) ======
+local function createRightMenu()
+	local ScreenGui = Instance.new("ScreenGui")
+	ScreenGui.Name = "HRM_RightMenu"
+	ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	ScreenGui.ResetOnSpawn = false
+
+	local RightFrame = Instance.new("Frame")
+	RightFrame.Name = "RightFrame"
+	RightFrame.Size = UDim2.new(0, 220, 0, 0)
+	RightFrame.Position = UDim2.new(1, -230, 0.3, 0)
+	RightFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+	RightFrame.BorderSizePixel = 0
+	RightFrame.Active = true
+	RightFrame.Draggable = true
+	RightFrame.ClipsDescendants = true
+	RightFrame.Visible = Config.RightMenuVisible
+	RightFrame.Parent = ScreenGui
+
+	local Title = Instance.new("TextLabel")
+	Title.Size = UDim2.new(1, 0, 0, 30)
+	Title.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+	Title.TextColor3 = Color3.fromRGB(255, 200, 100)
+	Title.Text = "⚙ Тюнинг блока"
+	Title.Font = Enum.Font.Code
+	Title.TextSize = 13
+	Title.BorderSizePixel = 0
+	Title.Parent = RightFrame
+
+	local yOffset = 35
+	local function createSlider(name, min, max, default, step, suffix, callback)
+		local SliderFrame = Instance.new("Frame")
+		SliderFrame.Size = UDim2.new(1, -12, 0, 48)
+		SliderFrame.Position = UDim2.new(0, 6, 0, yOffset)
+		SliderFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+		SliderFrame.BorderSizePixel = 0
+		SliderFrame.Parent = RightFrame
+
+		local Label = Instance.new("TextLabel")
+		Label.Size = UDim2.new(1, -8, 0, 16)
+		Label.Position = UDim2.new(0, 4, 0, 2)
+		Label.BackgroundTransparency = 1
+		Label.TextColor3 = Color3.fromRGB(180, 180, 180)
+		Label.Text = name .. ": " .. default .. suffix
+		Label.Font = Enum.Font.Code
+		Label.TextSize = 11
+		Label.TextXAlignment = Enum.TextXAlignment.Left
+		Label.Parent = SliderFrame
+
+		local sliderValue = default
+
+		local Minus10 = createStyledButton(SliderFrame, UDim2.new(0, 22, 0, 18), UDim2.new(0, 0, 0, 22),
+			"<<", Color3.fromRGB(80, 40, 40),
+			function() local v = math.max(min, sliderValue - (step * 10)); sliderValue = v; Label.Text = name .. ": " .. v .. suffix; callback(v) end)
+		local Minus = createStyledButton(SliderFrame, UDim2.new(0, 22, 0, 18), UDim2.new(0, 24, 0, 22),
+			"<", Color3.fromRGB(60, 60, 60),
+			function() local v = math.max(min, sliderValue - step); sliderValue = v; Label.Text = name .. ": " .. v .. suffix; callback(v) end)
+
+		local ValueLabel = Instance.new("TextLabel")
+		ValueLabel.Size = UDim2.new(1, -96, 0, 18)
+		ValueLabel.Position = UDim2.new(0, 48, 0, 22)
+		ValueLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+		ValueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		ValueLabel.Text = tostring(default) .. suffix
+		ValueLabel.Font = Enum.Font.Code
+		ValueLabel.TextSize = 12
+		ValueLabel.BorderSizePixel = 0
+		ValueLabel.Parent = SliderFrame
+
+		local Plus = createStyledButton(SliderFrame, UDim2.new(0, 22, 0, 18), UDim2.new(1, -48, 0, 22),
+			">", Color3.fromRGB(60, 60, 60),
+			function() local v = math.min(max, sliderValue + step); sliderValue = v; Label.Text = name .. ": " .. v .. suffix; ValueLabel.Text = tostring(v) .. suffix; callback(v) end)
+		local Plus10 = createStyledButton(SliderFrame, UDim2.new(0, 22, 0, 18), UDim2.new(1, -24, 0, 22),
+			">>", Color3.fromRGB(40, 80, 40),
+			function() local v = math.min(max, sliderValue + (step * 10)); sliderValue = v; Label.Text = name .. ": " .. v .. suffix; ValueLabel.Text = tostring(v) .. suffix; callback(v) end)
+
+		yOffset = yOffset + 50
+		return {
+			SetValue = function(v)
+				v = math.clamp(v, min, max)
+				sliderValue = v
+				Label.Text = name .. ": " .. v .. suffix
+				ValueLabel.Text = tostring(v) .. suffix
+			end
+		}
+	end
+
+	local rightSliders = {}
+	rightSliders.Distance = createSlider("Радиус", 5, 100, Config.CheckDistance, 1, "", function(v)
+		Config.CheckDistance = v
+	end)
+	rightSliders.ReleaseDelay = createSlider("Задержка", 1, 50, math.floor(Config.BlockReleaseDelay * 100 + 0.5), 1, " мс", function(v)
+		Config.BlockReleaseDelay = v / 100
+	end)
+
+	-- Разделитель
+	local Separator = Instance.new("Frame")
+	Separator.Size = UDim2.new(1, -12, 0, 1)
+	Separator.Position = UDim2.new(0, 6, 0, yOffset)
+	Separator.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	Separator.BorderSizePixel = 0
+	Separator.Parent = RightFrame
+	yOffset = yOffset + 4
+
+	-- Кнопка Billboard
+	local billBtn = createStyledButton(RightFrame, UDim2.new(1, -12, 0, 24), UDim2.new(0, 6, 0, yOffset),
+		"📋 Billboard: ON", Color3.fromRGB(45, 45, 65), function()
+			toggleBillboard()
+			billBtn.Text = "📋 Billboard: " .. (Config.BillboardVisible and "ON" or "OFF")
+		end)
+	yOffset = yOffset + 26
+
+	-- Кнопка закрытия
+	createStyledButton(RightFrame, UDim2.new(1, -12, 0, 24), UDim2.new(0, 6, 0, yOffset),
+		"Закрыть (RightShift)", Color3.fromRGB(50, 50, 50), function()
+			Config.RightMenuVisible = false
+			RightFrame.Visible = false
+		end)
+
+	RightFrame.Size = UDim2.new(0, 220, 0, yOffset + 34)
+	return RightFrame
+end
+
+-- ====== ИНИЦИАЛИЗАЦИЯ МЕНЮ ======
+local mainMenu = createMainMenu()
+local rightMenuFrame = createRightMenu()
+
+-- Горячие клавиши
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.P then
+		Config.MenuVisible = not Config.MenuVisible
+		mainMenu.Frame.Visible = Config.MenuVisible
+	end
+	if input.KeyCode == Enum.KeyCode.RightShift then
+		Config.RightMenuVisible = not Config.RightMenuVisible
+		rightMenuFrame.Visible = Config.RightMenuVisible
+	end
+end)
+
+-- ====== GUI НА СПИНЕ ======
+local function createBillboard()
+	if not LocalPlayer.Character then LocalPlayer.CharacterAdded:Wait() end
+	local character = LocalPlayer.Character
+	local torso = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso") or character:FindFirstChild("HumanoidRootPart")
+	if not torso then return end
+
+	if billboardGui then pcall(function() billboardGui:Destroy() end) end
+
+	billboardGui = Instance.new("BillboardGui")
+	billboardGui.Name = "HRM_Status"
+	billboardGui.AlwaysOnTop = true
+	billboardGui.Size = UDim2.new(0, 200, 0, 50)
+	billboardGui.StudsOffset = Vector3.new(0, 2.5, 0)
+	billboardGui.MaxDistance = 9999
+	billboardGui.Enabled = Config.BillboardVisible
+	billboardGui.Parent = torso
+
+	local bg = Instance.new("Frame")
+	bg.Size = UDim2.new(1, 0, 1, 0)
+	bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	bg.BackgroundTransparency = 0.5
+	bg.BorderSizePixel = 0
+	bg.Parent = billboardGui
+
+	statusText = Instance.new("TextLabel")
+	statusText.Size = UDim2.new(1, -4, 1, -4)
+	statusText.Position = UDim2.new(0, 2, 0, 2)
+	statusText.BackgroundTransparency = 1
+	statusText.Text = "⚡ HRM v5.6"
+	statusText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	statusText.Font = Enum.Font.Code
+	statusText.TextSize = 10
+	statusText.TextWrapped = true
+	statusText.RichText = true
+	statusText.Parent = bg
+
+	isInitialized = true
+end
+
+local function updateStatus(enemy)
+	if not statusText then return end
+	if not Config.BillboardVisible then return end
+	local lines = {"⚡ HRM v5.6"}
+
+	if Config.Enabled then
+		if enemy then
+			lines[#lines + 1] = "🛡 БЛОК | " .. enemy.player.Name
+			lines[#lines + 1] = enemy.method .. " | d:" .. string.format("%.1f", enemy.dist)
+		else
+			lines[#lines + 1] = "🟢 Ожидание..."
+		end
+	else
+		lines[#lines + 1] = "🔴 ВЫКЛ"
+	end
+
+	pcall(function() statusText.Text = table.concat(lines, "\n") end)
+end
+
+-- ====== ДЕТЕКТ ПО ANIMATIONID ======
+local function detectByAnimationID(player)
+	if not Config.UseAnimationDetect or not player.Character then return false, nil end
+
+	local humanoid = player.Character:FindFirstChild("Humanoid")
+	if not humanoid then return false, nil end
+
+	local success, result = pcall(function()
+		local animator = humanoid:FindFirstChild("Animator")
+		if not animator then return false, nil end
+		for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+			local anim = track.Animation
+			if anim then
+				local numId = tonumber(string.match(anim.AnimationId, "rbxassetid://(%d+)"))
+				if numId and allAttackAnimIDs[numId] then
+					return true, allAttackAnimIDs[numId]
+				end
+			end
+		end
+		return false, nil
+	end)
+	if success and result then return result end
+
+	success, result = pcall(function()
+		for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+			local anim = track.Animation
+			if anim then
+				local numId = tonumber(string.match(anim.AnimationId, "rbxassetid://(%d+)"))
+				if numId and allAttackAnimIDs[numId] then
+					return true, allAttackAnimIDs[numId]
+				end
+			end
+		end
+		return false, nil
+	end)
+	if success and result then return result end
+
+	success, result = pcall(function()
+		for _, desc in ipairs(player.Character:GetDescendants()) do
+			if desc:IsA("AnimationTrack") and desc.IsPlaying then
+				local anim = desc.Animation
+				if anim then
+					local numId = tonumber(string.match(anim.AnimationId, "rbxassetid://(%d+)"))
+					if numId and allAttackAnimIDs[numId] then
+						return true, allAttackAnimIDs[numId]
+					end
+				end
+			end
+		end
+		return false, nil
+	end)
+	if success and result then return result end
+
+	return false, nil
+end
+
+-- ====== ЗАПАСНОЙ ДЕТЕКТ: СКОРОСТЬ ======
+local LIMB_NAMES = {"RightHand", "LeftHand", "RightArm", "LeftArm", "RightLowerArm", "LeftLowerArm", "RightFoot", "LeftFoot", "RightLeg", "LeftLeg", "RightLowerLeg", "LeftLowerLeg"}
+
+local function detectByVelocity(player, myPos)
+	if not Config.UseVelocityDetect or not player.Character then return false, nil end
+
+	local fastestSpeed = 0
+	local fastestName = ""
+
+	for _, limbName in ipairs(LIMB_NAMES) do
+		local limb = player.Character:FindFirstChild(limbName, true)
+		if limb and limb:IsA("BasePart") then
+			local speed = limb.AssemblyLinearVelocity.Magnitude
+			if speed > fastestSpeed then
+				fastestSpeed = speed
+				fastestName = limbName
+			end
+		end
+	end
+
+	if fastestSpeed > Config.LimbVelocityThreshold then
+		return true, "LIMB:" .. fastestName
+	end
+
+	local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		local bodySpeed = hrp.AssemblyLinearVelocity.Magnitude
+		if bodySpeed > Config.BodyVelocityThreshold then
+			local dirToMe = (myPos - hrp.Position).Unit
+			if dirToMe:Dot(hrp.AssemblyLinearVelocity.Unit) > 0.75 then
+				return true, "DASH"
+			end
+		end
+	end
+
+	return false, nil
+end
+
+-- ====== ГЛАВНАЯ ФУНКЦИЯ ======
+local function getNearestAttackingEnemy()
+	if not LocalPlayer.Character then return nil end
+	local myHumanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+	if not myHumanoid or myHumanoid.Health <= 0 then return nil end
+	local myHRP = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if not myHRP then return nil end
+	local myPos = myHRP.Position
+
+	local closest = nil
+	local closestDist = Config.CheckDistance
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player == LocalPlayer then continue end
+		if not player.Character then continue end
+
+		local humanoid = player.Character:FindFirstChild("Humanoid")
+		local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+		if not humanoid or not hrp or humanoid.Health <= 0 then continue end
+
+		local dist = (myPos - hrp.Position).Magnitude
+		if dist > Config.CheckDistance then continue end
+
+		local isAttacking, method = detectByAnimationID(player)
+		if not isAttacking then
+			isAttacking, method = detectByVelocity(player, myPos)
+		end
+
+		if isAttacking and dist < closestDist then
+			closestDist = dist
+			closest = {player = player, dist = dist, method = method}
+		end
+	end
+
+	return closest
+end
+
+-- ====== БЛОКИРОВКА ======
+local function pressBlock()
+	if not isBlocking then
+		VIM:SendKeyEvent(true, Config.BlockKey, false, nil)
+		isBlocking = true
+		enemyJustLeft = false
+	end
+end
+
+local function releaseBlock()
+	if isBlocking then
+		VIM:SendKeyEvent(false, Config.BlockKey, false, nil)
+		isBlocking = false
+	end
+end
+
+-- ====== ГЛАВНЫЙ ЦИКЛ ======
+RunService.RenderStepped:Connect(function(deltaTime)
+	if not isInitialized then
+		pcall(createBillboard)
+		return
+	end
+	if not Config.Enabled then
+		releaseBlock()
+		updateStatus(nil)
+		return
+	end
+
+	local enemy = getNearestAttackingEnemy()
+
+	if enemy then
+		pressBlock()
+		enemyJustLeft = false
+		updateStatus(enemy)
+	else
+		if not enemyJustLeft then
+			enemyJustLeft = true
+			enemyLeaveTime = tick()
+		end
+
+		if tick() - enemyLeaveTime >= Config.BlockReleaseDelay then
+			releaseBlock()
+			updateStatus(nil)
+		end
+	end
+end)
+
+-- ====== ОЧИСТКА ПРИ ВЫХОДЕ И РЕСПАВНЕ ======
+LocalPlayer.CharacterAdded:Connect(function()
+	isInitialized = false
+	releaseBlock()
+	billboardGui = nil
+	statusText = nil
+	enemyJustLeft = false
+end)
+
+LocalPlayer.CharacterRemoving:Connect(function()
+	releaseBlock()
+	isInitialized = false
+	billboardGui = nil
+	statusText = nil
+	enemyJustLeft = false
+end)
+
+chatMsg("✅ AutoBlock v5.6 | P=меню | RShift=тюнинг | Billboard кнопка в меню")
