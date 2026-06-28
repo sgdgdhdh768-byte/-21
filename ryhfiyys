@@ -1,0 +1,1241 @@
+-- Hub_GUI.lua
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+
+-- Ждём PlayerGui
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- ==================== ПЕРЕМЕННЫЕ ====================
+local speedValue = 16
+local jumpValue = 50
+local speedEnabled = false
+local jumpEnabled = false
+local fpsBoostEnabled = false
+
+-- ==================== ФУНКЦИИ СТАФФА ====================
+RunService.Heartbeat:Connect(function()
+	local char = LocalPlayer.Character
+	if char then
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			if speedEnabled then
+				hum.WalkSpeed = speedValue
+			end
+			if jumpEnabled then
+				hum.JumpPower = jumpValue
+			end
+		end
+	end
+end)
+
+local function removeTextures()
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("BasePart") then
+			if obj.Material == Enum.Material.Grass or obj.Material == Enum.Material.Fabric or obj.Material == Enum.Material.WoodPlanks then
+				-- скипаем
+			else
+				pcall(function()
+					obj.TextureID = ""
+					obj.Material = Enum.Material.SmoothPlastic
+					obj.Color = Color3.fromRGB(120, 120, 120)
+				end)
+			end
+		elseif obj:IsA("Decal") or obj:IsA("Texture") then
+			obj:Destroy()
+		end
+	end
+end
+
+local function restoreTextures()
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("BasePart") then
+			pcall(function()
+				obj.Material = Enum.Material.SmoothPlastic
+				obj.Color = Color3.fromRGB(163, 162, 165)
+			end)
+		end
+	end
+end
+
+-- ==================== GUI ====================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "Hub_GUI"
+ScreenGui.Parent = PlayerGui
+ScreenGui.ResetOnSpawn = false
+
+-- Основная рамка
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 300, 0, 220)
+MainFrame.Position = UDim2.new(0.5, -150, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 6)
+UICorner.Parent = MainFrame
+
+local UIStroke = Instance.new("UIStroke")
+UIStroke.Color = Color3.fromRGB(60, 60, 60)
+UIStroke.Thickness = 1
+UIStroke.Parent = MainFrame
+
+-- Крестик
+local CloseButton = Instance.new("TextButton")
+CloseButton.Name = "CloseButton"
+CloseButton.Size = UDim2.new(0, 24, 0, 24)
+CloseButton.Position = UDim2.new(1, -28, 0, 4)
+CloseButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+CloseButton.BorderSizePixel = 0
+CloseButton.Text = "×"
+CloseButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+CloseButton.TextSize = 18
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.Parent = MainFrame
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 4)
+CloseCorner.Parent = CloseButton
+
+CloseButton.MouseEnter:Connect(function()
+	CloseButton.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+	CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+end)
+
+CloseButton.MouseLeave:Connect(function()
+	CloseButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	CloseButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+end)
+
+CloseButton.MouseButton1Click:Connect(function()
+	ScreenGui:Destroy()
+end)
+
+-- Заголовок
+local Title = Instance.new("TextLabel")
+Title.Name = "Title"
+Title.Size = UDim2.new(0, 200, 0, 20)
+Title.Position = UDim2.new(0, 10, 0, 6)
+Title.BackgroundTransparency = 1
+Title.Text = "Hub"
+Title.TextColor3 = Color3.fromRGB(220, 220, 220)
+Title.TextSize = 16
+Title.Font = Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = MainFrame
+
+-- Панель вкладок
+local TabBar = Instance.new("Frame")
+TabBar.Name = "TabBar"
+TabBar.Size = UDim2.new(0, 280, 0, 28)
+TabBar.Position = UDim2.new(0, 10, 0, 34)
+TabBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+TabBar.BorderSizePixel = 0
+TabBar.Parent = MainFrame
+
+local TabBarCorner = Instance.new("UICorner")
+TabBarCorner.CornerRadius = UDim.new(0, 4)
+TabBarCorner.Parent = TabBar
+
+-- Контейнер для контента вкладок
+local TabContent = Instance.new("Frame")
+TabContent.Name = "TabContent"
+TabContent.Size = UDim2.new(0, 280, 0, 140)
+TabContent.Position = UDim2.new(0, 10, 0, 68)
+TabContent.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+TabContent.BorderSizePixel = 0
+TabContent.Parent = MainFrame
+
+local TabContentCorner = Instance.new("UICorner")
+TabContentCorner.CornerRadius = UDim.new(0, 4)
+TabContentCorner.Parent = TabContent
+
+-- ==================== ДРАГ ОКНА ====================
+local dragStart, dragPos, dragging = nil, nil, false
+
+MainFrame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = input.Position
+		dragPos = MainFrame.Position
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement) then
+		local delta = input.Position - dragStart
+		MainFrame.Position = UDim2.new(dragPos.X.Scale, dragPos.X.Offset + delta.X, dragPos.Y.Scale, dragPos.Y.Offset + delta.Y)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = false
+		dragStart = nil
+	end
+end)
+
+-- ==================== РЕСАЙЗ ====================
+local MIN_HEIGHT = 180
+local MAX_HEIGHT = 600
+local resizing = false
+local resizeStart, startHeight
+
+local ResizeHandle = Instance.new("TextButton")
+ResizeHandle.Name = "ResizeHandle"
+ResizeHandle.Size = UDim2.new(0, 300, 0, 12)
+ResizeHandle.Position = UDim2.new(0, 0, 1, -6)
+ResizeHandle.BackgroundTransparency = 1
+ResizeHandle.BorderSizePixel = 0
+ResizeHandle.Text = ""
+ResizeHandle.AutoButtonColor = false
+ResizeHandle.ZIndex = 10
+ResizeHandle.Parent = MainFrame
+
+ResizeHandle.MouseButton1Down:Connect(function()
+	resizing = true
+	resizeStart = UserInputService:GetMouseLocation()
+	startHeight = MainFrame.AbsoluteSize.Y
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement) then
+		local deltaY = input.Position.Y - resizeStart.Y
+		local newHeight = math.clamp(startHeight + deltaY, MIN_HEIGHT, MAX_HEIGHT)
+		MainFrame.Size = UDim2.new(0, 300, 0, newHeight)
+		TabContent.Size = UDim2.new(0, 280, 0, newHeight - 80)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		resizing = false
+	end
+end)
+
+-- Визуальный индикатор ресайза
+local ResizeIndicator = Instance.new("Frame")
+ResizeIndicator.Name = "ResizeIndicator"
+ResizeIndicator.Size = UDim2.new(0, 40, 0, 2)
+ResizeIndicator.Position = UDim2.new(0.5, -20, 1, -1)
+ResizeIndicator.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+ResizeIndicator.BorderSizePixel = 0
+ResizeIndicator.ZIndex = 11
+ResizeIndicator.Parent = MainFrame
+
+local ResizeIndicatorCorner = Instance.new("UICorner")
+ResizeIndicatorCorner.CornerRadius = UDim.new(0, 1)
+ResizeIndicatorCorner.Parent = ResizeIndicator
+
+-- ==================== ВКЛАДКИ ====================
+local tabs = {}
+local currentTab = nil
+
+local function switchTab(tabName)
+	if currentTab == tabName then return end
+	currentTab = tabName
+
+	for _, tab in pairs(tabs) do
+		tab.button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+		tab.button.TextColor3 = Color3.fromRGB(160, 160, 160)
+		tab.content.Visible = false
+	end
+
+	local tab = tabs[tabName]
+	if tab then
+		tab.button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		tab.button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		tab.content.Visible = true
+	end
+end
+
+local function createTabButton(name, position)
+	local btn = Instance.new("TextButton")
+	btn.Name = name .. "Tab"
+	btn.Size = UDim2.new(0, 138, 0, 24)
+	btn.Position = UDim2.new(0, position, 0, 2)
+	btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	btn.BorderSizePixel = 0
+	btn.Text = name
+	btn.TextColor3 = Color3.fromRGB(160, 160, 160)
+	btn.TextSize = 13
+	btn.Font = Enum.Font.GothamBold
+	btn.Parent = TabBar
+
+	local btnCorner = Instance.new("UICorner")
+	btnCorner.CornerRadius = UDim.new(0, 3)
+	btnCorner.Parent = btn
+
+	return btn
+end
+
+local function createTabContent()
+	local content = Instance.new("Frame")
+	content.Name = "Content"
+	content.Size = UDim2.new(1, 0, 1, 0)
+	content.BackgroundTransparency = 1
+	content.Visible = false
+	content.Parent = TabContent
+	return content
+end
+
+local function createSlider(parent, yPos, label, minVal, maxVal, default, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(0, 260, 0, 50)
+	row.Position = UDim2.new(0, 10, 0, yPos)
+	row.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	row.BorderSizePixel = 0
+	row.Parent = parent
+
+	local rowCorner = Instance.new("UICorner")
+	rowCorner.CornerRadius = UDim.new(0, 4)
+	rowCorner.Parent = row
+
+	local lbl = Instance.new("TextLabel")
+	lbl.BackgroundTransparency = 1
+	lbl.Size = UDim2.new(0, 150, 0, 16)
+	lbl.Position = UDim2.new(0, 8, 0, 5)
+	lbl.Font = Enum.Font.GothamBold
+	lbl.TextSize = 11
+	lbl.TextColor3 = Color3.fromRGB(220, 220, 220)
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.Text = label
+	lbl.Parent = row
+
+	local val = Instance.new("TextLabel")
+	val.BackgroundTransparency = 1
+	val.Size = UDim2.new(0, 80, 0, 16)
+	val.Position = UDim2.new(1, -88, 0, 5)
+	val.Font = Enum.Font.Gotham
+	val.TextSize = 11
+	val.TextColor3 = Color3.fromRGB(140, 140, 140)
+	val.TextXAlignment = Enum.TextXAlignment.Right
+	val.Text = tostring(default)
+	val.Parent = row
+
+	local sliderBg = Instance.new("TextButton")
+	sliderBg.Size = UDim2.new(0, 244, 0, 6)
+	sliderBg.Position = UDim2.new(0, 8, 0, 28)
+	sliderBg.BackgroundColor3 = Color3.fromRGB(45, 47, 56)
+	sliderBg.BorderSizePixel = 0
+	sliderBg.Text = ""
+	sliderBg.AutoButtonColor = false
+	sliderBg.Parent = row
+
+	local sliderCorner = Instance.new("UICorner")
+	sliderCorner.CornerRadius = UDim.new(0, 3)
+	sliderCorner.Parent = sliderBg
+
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.new(0, 0, 1, 0)
+	fill.BackgroundColor3 = Color3.fromRGB(242, 201, 76)
+	fill.BorderSizePixel = 0
+	fill.Parent = sliderBg
+
+	local fillCorner = Instance.new("UICorner")
+	fillCorner.CornerRadius = UDim.new(0, 3)
+	fillCorner.Parent = fill
+
+	local knob = Instance.new("TextButton")
+	knob.Size = UDim2.new(0, 14, 0, 14)
+	knob.Position = UDim2.new(0, -7, 0.5, -7)
+	knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	knob.BorderSizePixel = 0
+	knob.Text = ""
+	knob.AutoButtonColor = false
+	knob.ZIndex = 2
+	knob.Parent = sliderBg
+
+	local knobCorner = Instance.new("UICorner")
+	knobCorner.CornerRadius = UDim.new(0, 7)
+	knobCorner.Parent = knob
+
+	local sliderDragging = false
+
+	local function setValue(alpha)
+		alpha = math.clamp(alpha, 0, 1)
+		local v = math.floor(minVal + (maxVal - minVal) * alpha)
+		val.Text = tostring(v)
+		fill.Size = UDim2.new(alpha, 0, 1, 0)
+		knob.Position = UDim2.new(alpha, -7, 0.5, -7)
+		callback(v)
+	end
+
+	local initialAlpha = (default - minVal) / (maxVal - minVal)
+	setValue(initialAlpha)
+
+	sliderBg.MouseButton1Down:Connect(function()
+		sliderDragging = true
+		local relX = UserInputService:GetMouseLocation().X - sliderBg.AbsolutePosition.X
+		setValue(relX / sliderBg.AbsoluteSize.X)
+	end)
+
+	knob.MouseButton1Down:Connect(function()
+		sliderDragging = true
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if sliderDragging and (input.UserInputType == Enum.UserInputType.MouseMovement) then
+			local relX = input.Position.X - sliderBg.AbsolutePosition.X
+			setValue(relX / sliderBg.AbsoluteSize.X)
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			sliderDragging = false
+		end
+	end)
+
+	return row
+end
+
+-- ==================== ВКЛАДКА STAFF ====================
+tabs["Staff"] = {
+	button = createTabButton("Staff", 2),
+	content = createTabContent()
+}
+
+local staffScrolling = Instance.new("ScrollingFrame")
+staffScrolling.Size = UDim2.new(1, 0, 1, 0)
+staffScrolling.BackgroundTransparency = 1
+staffScrolling.BorderSizePixel = 0
+staffScrolling.ScrollBarThickness = 3
+staffScrolling.ScrollBarImageColor3 = Color3.fromRGB(242, 201, 76)
+staffScrolling.ScrollBarImageTransparency = 0.3
+staffScrolling.AutomaticCanvasSize = Enum.AutomaticSize.Y
+staffScrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
+staffScrolling.Parent = tabs["Staff"].content
+
+local staffList = Instance.new("UIListLayout")
+staffList.Padding = UDim.new(0, 6)
+staffList.SortOrder = Enum.SortOrder.LayoutOrder
+staffList.Parent = staffScrolling
+
+-- FPS Boost
+local fpsBoostButton = Instance.new("TextButton")
+fpsBoostButton.Size = UDim2.new(0, 260, 0, 36)
+fpsBoostButton.Position = UDim2.new(0, 10, 0, 4)
+fpsBoostButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+fpsBoostButton.BorderSizePixel = 0
+fpsBoostButton.Text = "FPS Boost: OFF"
+fpsBoostButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+fpsBoostButton.TextSize = 13
+fpsBoostButton.Font = Enum.Font.GothamBold
+fpsBoostButton.Parent = staffScrolling
+
+local fpsCorner = Instance.new("UICorner")
+fpsCorner.CornerRadius = UDim.new(0, 4)
+fpsCorner.Parent = fpsBoostButton
+
+fpsBoostButton.MouseButton1Click:Connect(function()
+	fpsBoostEnabled = not fpsBoostEnabled
+	if fpsBoostEnabled then
+		fpsBoostButton.Text = "FPS Boost: ON"
+		fpsBoostButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+		removeTextures()
+	else
+		fpsBoostButton.Text = "FPS Boost: OFF"
+		fpsBoostButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+		restoreTextures()
+	end
+end)
+
+-- Скорость
+createSlider(staffScrolling, 46, "Walk Speed", 16, 200, 16, function(v)
+	speedValue = v
+end)
+
+local speedToggle = Instance.new("TextButton")
+speedToggle.Size = UDim2.new(0, 260, 0, 26)
+speedToggle.Position = UDim2.new(0, 10, 0, 96)
+speedToggle.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+speedToggle.BorderSizePixel = 0
+speedToggle.Text = "Speed: OFF"
+speedToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+speedToggle.TextSize = 12
+speedToggle.Font = Enum.Font.GothamBold
+speedToggle.Parent = staffScrolling
+
+local speedToggleCorner = Instance.new("UICorner")
+speedToggleCorner.CornerRadius = UDim.new(0, 4)
+speedToggleCorner.Parent = speedToggle
+
+speedToggle.MouseButton1Click:Connect(function()
+	speedEnabled = not speedEnabled
+	if speedEnabled then
+		speedToggle.Text = "Speed: ON"
+		speedToggle.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+	else
+		speedToggle.Text = "Speed: OFF"
+		speedToggle.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+		local char = LocalPlayer.Character
+		if char then
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			if hum then
+				hum.WalkSpeed = 16
+			end
+		end
+	end
+end)
+
+-- Прыжок
+createSlider(staffScrolling, 128, "Jump Power", 50, 300, 50, function(v)
+	jumpValue = v
+end)
+
+local jumpToggle = Instance.new("TextButton")
+jumpToggle.Size = UDim2.new(0, 260, 0, 26)
+jumpToggle.Position = UDim2.new(0, 10, 0, 178)
+jumpToggle.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+jumpToggle.BorderSizePixel = 0
+jumpToggle.Text = "Jump: OFF"
+jumpToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+jumpToggle.TextSize = 12
+jumpToggle.Font = Enum.Font.GothamBold
+jumpToggle.Parent = staffScrolling
+
+local jumpToggleCorner = Instance.new("UICorner")
+jumpToggleCorner.CornerRadius = UDim.new(0, 4)
+jumpToggleCorner.Parent = jumpToggle
+
+jumpToggle.MouseButton1Click:Connect(function()
+	jumpEnabled = not jumpEnabled
+	if jumpEnabled then
+		jumpToggle.Text = "Jump: ON"
+		jumpToggle.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+	else
+		jumpToggle.Text = "Jump: OFF"
+		jumpToggle.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+		local char = LocalPlayer.Character
+		if char then
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			if hum then
+				hum.JumpPower = 50
+			end
+		end
+	end
+end)
+
+staffScrolling.CanvasSize = UDim2.new(0, 0, 0, 210)
+
+tabs["Staff"].button.MouseButton1Click:Connect(function()
+	switchTab("Staff")
+end)
+
+-- ==================== ВКЛАДКА HUB ====================
+tabs["Hub"] = {
+	button = createTabButton("Hub", 142),
+	content = createTabContent()
+}
+
+local hubScrolling = Instance.new("ScrollingFrame")
+hubScrolling.Size = UDim2.new(1, 0, 1, 0)
+hubScrolling.BackgroundTransparency = 1
+hubScrolling.BorderSizePixel = 0
+hubScrolling.ScrollBarThickness = 3
+hubScrolling.ScrollBarImageColor3 = Color3.fromRGB(60, 60, 180)
+hubScrolling.ScrollBarImageTransparency = 0.3
+hubScrolling.AutomaticCanvasSize = Enum.AutomaticSize.Y
+hubScrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
+hubScrolling.Parent = tabs["Hub"].content
+
+local hubList = Instance.new("UIListLayout")
+hubList.Padding = UDim.new(0, 6)
+hubList.SortOrder = Enum.SortOrder.LayoutOrder
+hubList.Parent = hubScrolling
+
+-- Кнопка Infinite Yield
+local InfiniteYieldButton = Instance.new("TextButton")
+InfiniteYieldButton.Name = "InfiniteYieldButton"
+InfiniteYieldButton.Size = UDim2.new(0, 260, 0, 36)
+InfiniteYieldButton.Position = UDim2.new(0, 10, 0, 4)
+InfiniteYieldButton.BackgroundColor3 = Color3.fromRGB(60, 60, 180)
+InfiniteYieldButton.BorderSizePixel = 0
+InfiniteYieldButton.Text = "Infinite Yield"
+InfiniteYieldButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+InfiniteYieldButton.TextSize = 15
+InfiniteYieldButton.Font = Enum.Font.GothamBold
+InfiniteYieldButton.Parent = hubScrolling
+
+local IYCorner = Instance.new("UICorner")
+IYCorner.CornerRadius = UDim.new(0, 4)
+IYCorner.Parent = InfiniteYieldButton
+
+local IYStroke = Instance.new("UIStroke")
+IYStroke.Color = Color3.fromRGB(100, 100, 220)
+IYStroke.Thickness = 1
+IYStroke.Parent = InfiniteYieldButton
+
+InfiniteYieldButton.MouseEnter:Connect(function()
+	InfiniteYieldButton.BackgroundColor3 = Color3.fromRGB(80, 80, 200)
+end)
+
+InfiniteYieldButton.MouseLeave:Connect(function()
+	InfiniteYieldButton.BackgroundColor3 = Color3.fromRGB(60, 60, 180)
+end)
+
+local iyStatus = Instance.new("TextLabel")
+iyStatus.Size = UDim2.new(0, 260, 0, 16)
+iyStatus.Position = UDim2.new(0, 10, 0, 44)
+iyStatus.BackgroundTransparency = 1
+iyStatus.Text = "Keyless"
+iyStatus.TextColor3 = Color3.fromRGB(100, 200, 100)
+iyStatus.TextSize = 11
+iyStatus.Font = Enum.Font.Gotham
+iyStatus.TextXAlignment = Enum.TextXAlignment.Left
+iyStatus.Parent = hubScrolling
+
+InfiniteYieldButton.MouseButton1Click:Connect(function()
+	iyStatus.Text = "Загружается..."
+	iyStatus.TextColor3 = Color3.fromRGB(255, 200, 100)
+	InfiniteYieldButton.Text = "Загрузка..."
+	task.spawn(function()
+		local success, err = pcall(function()
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
+		end)
+		if success then
+			iyStatus.Text = "Keyless"
+			iyStatus.TextColor3 = Color3.fromRGB(100, 200, 100)
+			InfiniteYieldButton.Text = "Infinite Yield"
+		else
+			iyStatus.Text = "Ошибка: " .. tostring(err)
+			iyStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+			InfiniteYieldButton.Text = "Ошибка"
+		end
+	end)
+end)
+
+-- Разделитель 1
+local Divider1 = Instance.new("Frame")
+Divider1.Size = UDim2.new(0, 260, 0, 1)
+Divider1.Position = UDim2.new(0, 10, 0, 66)
+Divider1.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Divider1.BorderSizePixel = 0
+Divider1.Parent = hubScrolling
+
+-- Кнопка Sell Lemons Farm
+local LemonButton = Instance.new("TextButton")
+LemonButton.Name = "LemonButton"
+LemonButton.Size = UDim2.new(0, 260, 0, 36)
+LemonButton.Position = UDim2.new(0, 10, 0, 72)
+LemonButton.BackgroundColor3 = Color3.fromRGB(242, 201, 76)
+LemonButton.BorderSizePixel = 0
+LemonButton.Text = "🍋 Sell Lemons Farm"
+LemonButton.TextColor3 = Color3.fromRGB(22, 23, 28)
+LemonButton.TextSize = 15
+LemonButton.Font = Enum.Font.GothamBold
+LemonButton.Parent = hubScrolling
+
+local LemonCorner = Instance.new("UICorner")
+LemonCorner.CornerRadius = UDim.new(0, 4)
+LemonCorner.Parent = LemonButton
+
+local LemonStroke = Instance.new("UIStroke")
+LemonStroke.Color = Color3.fromRGB(255, 220, 120)
+LemonStroke.Thickness = 1
+LemonStroke.Parent = LemonButton
+
+LemonButton.MouseEnter:Connect(function()
+	LemonButton.BackgroundColor3 = Color3.fromRGB(255, 215, 100)
+end)
+
+LemonButton.MouseLeave:Connect(function()
+	LemonButton.BackgroundColor3 = Color3.fromRGB(242, 201, 76)
+end)
+
+local lemonStatus = Instance.new("TextLabel")
+lemonStatus.Size = UDim2.new(0, 260, 0, 16)
+lemonStatus.Position = UDim2.new(0, 10, 0, 112)
+lemonStatus.BackgroundTransparency = 1
+lemonStatus.Text = "Keyless"
+lemonStatus.TextColor3 = Color3.fromRGB(100, 200, 100)
+lemonStatus.TextSize = 11
+lemonStatus.Font = Enum.Font.Gotham
+lemonStatus.TextXAlignment = Enum.TextXAlignment.Left
+lemonStatus.Parent = hubScrolling
+
+LemonButton.MouseButton1Click:Connect(function()
+	lemonStatus.Text = "Загружается..."
+	lemonStatus.TextColor3 = Color3.fromRGB(255, 200, 100)
+	LemonButton.Text = "🍋 Загрузка..."
+	task.spawn(function()
+		local success, err = pcall(function()
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/sgdgdhdh768-byte/-21/main/hahdhhjahjafheghwefjw"))()
+		end)
+		if success then
+			lemonStatus.Text = "Keyless"
+			lemonStatus.TextColor3 = Color3.fromRGB(100, 200, 100)
+			LemonButton.Text = "🍋 Sell Lemons Farm"
+		else
+			lemonStatus.Text = "Ошибка: " .. tostring(err)
+			lemonStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+			LemonButton.Text = "🍋 Ошибка"
+		end
+	end)
+end)
+
+-- Разделитель 2
+local Divider2 = Instance.new("Frame")
+Divider2.Size = UDim2.new(0, 260, 0, 1)
+Divider2.Position = UDim2.new(0, 10, 0, 134)
+Divider2.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Divider2.BorderSizePixel = 0
+Divider2.Parent = hubScrolling
+
+-- Кнопка BABFT
+local BABFTButton = Instance.new("TextButton")
+BABFTButton.Name = "BABFTButton"
+BABFTButton.Size = UDim2.new(0, 260, 0, 36)
+BABFTButton.Position = UDim2.new(0, 10, 0, 140)
+BABFTButton.BackgroundColor3 = Color3.fromRGB(160, 100, 60)
+BABFTButton.BorderSizePixel = 0
+BABFTButton.Text = "BABFT"
+BABFTButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+BABFTButton.TextSize = 15
+BABFTButton.Font = Enum.Font.GothamBold
+BABFTButton.Parent = hubScrolling
+
+local BABFTCorner = Instance.new("UICorner")
+BABFTCorner.CornerRadius = UDim.new(0, 4)
+BABFTCorner.Parent = BABFTButton
+
+local BABFTStroke = Instance.new("UIStroke")
+BABFTStroke.Color = Color3.fromRGB(200, 140, 100)
+BABFTStroke.Thickness = 1
+BABFTStroke.Parent = BABFTButton
+
+BABFTButton.MouseEnter:Connect(function()
+	BABFTButton.BackgroundColor3 = Color3.fromRGB(180, 120, 80)
+end)
+
+BABFTButton.MouseLeave:Connect(function()
+	BABFTButton.BackgroundColor3 = Color3.fromRGB(160, 100, 60)
+end)
+
+local babftStatus = Instance.new("TextLabel")
+babftStatus.Size = UDim2.new(0, 260, 0, 16)
+babftStatus.Position = UDim2.new(0, 10, 0, 180)
+babftStatus.BackgroundTransparency = 1
+babftStatus.Text = "Keyless"
+babftStatus.TextColor3 = Color3.fromRGB(100, 200, 100)
+babftStatus.TextSize = 11
+babftStatus.Font = Enum.Font.Gotham
+babftStatus.TextXAlignment = Enum.TextXAlignment.Left
+babftStatus.Parent = hubScrolling
+
+BABFTButton.MouseButton1Click:Connect(function()
+	babftStatus.Text = "Загружается..."
+	babftStatus.TextColor3 = Color3.fromRGB(255, 200, 100)
+	BABFTButton.Text = "Загрузка..."
+	task.spawn(function()
+		local success, err = pcall(function()
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/sgdgdhdh768-byte/-21/refs/heads/main/adaa"))()
+		end)
+		if success then
+			babftStatus.Text = "Keyless"
+			babftStatus.TextColor3 = Color3.fromRGB(100, 200, 100)
+			BABFTButton.Text = "BABFT"
+		else
+			babftStatus.Text = "Ошибка: " .. tostring(err)
+			babftStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+			BABFTButton.Text = "Ошибка"
+		end
+	end)
+end)
+
+-- Разделитель 3
+local Divider3 = Instance.new("Frame")
+Divider3.Size = UDim2.new(0, 260, 0, 1)
+Divider3.Position = UDim2.new(0, 10, 0, 202)
+Divider3.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Divider3.BorderSizePixel = 0
+Divider3.Parent = hubScrolling
+
+-- Кнопка Auto Block TSB
+local AutoBlockButton = Instance.new("TextButton")
+AutoBlockButton.Name = "AutoBlockButton"
+AutoBlockButton.Size = UDim2.new(0, 260, 0, 36)
+AutoBlockButton.Position = UDim2.new(0, 10, 0, 208)
+AutoBlockButton.BackgroundColor3 = Color3.fromRGB(180, 130, 40)
+AutoBlockButton.BorderSizePixel = 0
+AutoBlockButton.Text = "Auto Block TSB"
+AutoBlockButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoBlockButton.TextSize = 15
+AutoBlockButton.Font = Enum.Font.GothamBold
+AutoBlockButton.Parent = hubScrolling
+
+local ABTCorner = Instance.new("UICorner")
+ABTCorner.CornerRadius = UDim.new(0, 4)
+ABTCorner.Parent = AutoBlockButton
+
+local ABTStroke = Instance.new("UIStroke")
+ABTStroke.Color = Color3.fromRGB(220, 170, 80)
+ABTStroke.Thickness = 1
+ABTStroke.Parent = AutoBlockButton
+
+AutoBlockButton.MouseEnter:Connect(function()
+	AutoBlockButton.BackgroundColor3 = Color3.fromRGB(200, 150, 60)
+end)
+
+AutoBlockButton.MouseLeave:Connect(function()
+	AutoBlockButton.BackgroundColor3 = Color3.fromRGB(180, 130, 40)
+end)
+
+local abtStatus = Instance.new("TextLabel")
+abtStatus.Size = UDim2.new(0, 260, 0, 16)
+abtStatus.Position = UDim2.new(0, 10, 0, 248)
+abtStatus.BackgroundTransparency = 1
+abtStatus.Text = "Keyless"
+abtStatus.TextColor3 = Color3.fromRGB(100, 200, 100)
+abtStatus.TextSize = 11
+abtStatus.Font = Enum.Font.Gotham
+abtStatus.TextXAlignment = Enum.TextXAlignment.Left
+abtStatus.Parent = hubScrolling
+
+AutoBlockButton.MouseButton1Click:Connect(function()
+	abtStatus.Text = "Загружается..."
+	abtStatus.TextColor3 = Color3.fromRGB(255, 200, 100)
+	AutoBlockButton.Text = "Загрузка..."
+	task.spawn(function()
+		local success, err = pcall(function()
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/sgdgdhdh768-byte/-21/refs/heads/main/adadawds"))()
+		end)
+		if success then
+			abtStatus.Text = "Keyless"
+			abtStatus.TextColor3 = Color3.fromRGB(100, 200, 100)
+			AutoBlockButton.Text = "Auto Block TSB"
+		else
+			abtStatus.Text = "Ошибка: " .. tostring(err)
+			abtStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+			AutoBlockButton.Text = "Ошибка"
+		end
+	end)
+end)
+
+-- Разделитель 4
+local Divider4 = Instance.new("Frame")
+Divider4.Size = UDim2.new(0, 260, 0, 1)
+Divider4.Position = UDim2.new(0, 10, 0, 270)
+Divider4.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Divider4.BorderSizePixel = 0
+Divider4.Parent = hubScrolling
+
+-- Кнопка Tool Orbit
+local ToolOrbitButton = Instance.new("TextButton")
+ToolOrbitButton.Name = "ToolOrbitButton"
+ToolOrbitButton.Size = UDim2.new(0, 260, 0, 36)
+ToolOrbitButton.Position = UDim2.new(0, 10, 0, 276)
+ToolOrbitButton.BackgroundColor3 = Color3.fromRGB(80, 80, 160)
+ToolOrbitButton.BorderSizePixel = 0
+ToolOrbitButton.Text = "Tool Orbit"
+ToolOrbitButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToolOrbitButton.TextSize = 15
+ToolOrbitButton.Font = Enum.Font.GothamBold
+ToolOrbitButton.Parent = hubScrolling
+
+local TOCorner = Instance.new("UICorner")
+TOCorner.CornerRadius = UDim.new(0, 4)
+TOCorner.Parent = ToolOrbitButton
+
+local TOStroke = Instance.new("UIStroke")
+TOStroke.Color = Color3.fromRGB(120, 120, 220)
+TOStroke.Thickness = 1
+TOStroke.Parent = ToolOrbitButton
+
+ToolOrbitButton.MouseEnter:Connect(function()
+	ToolOrbitButton.BackgroundColor3 = Color3.fromRGB(100, 100, 180)
+end)
+
+ToolOrbitButton.MouseLeave:Connect(function()
+	ToolOrbitButton.BackgroundColor3 = Color3.fromRGB(80, 80, 160)
+end)
+
+local toStatus = Instance.new("TextLabel")
+toStatus.Size = UDim2.new(0, 260, 0, 16)
+toStatus.Position = UDim2.new(0, 10, 0, 316)
+toStatus.BackgroundTransparency = 1
+toStatus.Text = "Keyless"
+toStatus.TextColor3 = Color3.fromRGB(100, 200, 100)
+toStatus.TextSize = 11
+toStatus.Font = Enum.Font.Gotham
+toStatus.TextXAlignment = Enum.TextXAlignment.Left
+toStatus.Parent = hubScrolling
+
+ToolOrbitButton.MouseButton1Click:Connect(function()
+	toStatus.Text = "Загружается..."
+	toStatus.TextColor3 = Color3.fromRGB(255, 200, 100)
+	ToolOrbitButton.Text = "Загрузка..."
+	task.spawn(function()
+		local success, err = pcall(function()
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/Gazer-Ha/Tool-orbit/refs/heads/main/Source"))()
+		end)
+		if success then
+			toStatus.Text = "Keyless"
+			toStatus.TextColor3 = Color3.fromRGB(100, 200, 100)
+			ToolOrbitButton.Text = "Tool Orbit"
+		else
+			toStatus.Text = "Ошибка: " .. tostring(err)
+			toStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+			ToolOrbitButton.Text = "Ошибка"
+		end
+	end)
+end)
+
+-- Разделитель 5
+local Divider5 = Instance.new("Frame")
+Divider5.Size = UDim2.new(0, 260, 0, 1)
+Divider5.Position = UDim2.new(0, 10, 0, 338)
+Divider5.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Divider5.BorderSizePixel = 0
+Divider5.Parent = hubScrolling
+
+-- Кнопка Ultimate Fling
+local FlingButton = Instance.new("TextButton")
+FlingButton.Name = "FlingButton"
+FlingButton.Size = UDim2.new(0, 260, 0, 36)
+FlingButton.Position = UDim2.new(0, 10, 0, 344)
+FlingButton.BackgroundColor3 = Color3.fromRGB(200, 80, 140)
+FlingButton.BorderSizePixel = 0
+FlingButton.Text = "Ultimate Fling GUI"
+FlingButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+FlingButton.TextSize = 15
+FlingButton.Font = Enum.Font.GothamBold
+FlingButton.Parent = hubScrolling
+
+local FlingCorner = Instance.new("UICorner")
+FlingCorner.CornerRadius = UDim.new(0, 4)
+FlingCorner.Parent = FlingButton
+
+local FlingStroke = Instance.new("UIStroke")
+FlingStroke.Color = Color3.fromRGB(255, 120, 180)
+FlingStroke.Thickness = 1
+FlingStroke.Parent = FlingButton
+
+FlingButton.MouseEnter:Connect(function()
+	FlingButton.BackgroundColor3 = Color3.fromRGB(220, 100, 160)
+end)
+
+FlingButton.MouseLeave:Connect(function()
+	FlingButton.BackgroundColor3 = Color3.fromRGB(200, 80, 140)
+end)
+
+local flingStatus = Instance.new("TextLabel")
+flingStatus.Size = UDim2.new(0, 260, 0, 16)
+flingStatus.Position = UDim2.new(0, 10, 0, 384)
+flingStatus.BackgroundTransparency = 1
+flingStatus.Text = "Keyless"
+flingStatus.TextColor3 = Color3.fromRGB(100, 200, 100)
+flingStatus.TextSize = 11
+flingStatus.Font = Enum.Font.Gotham
+flingStatus.TextXAlignment = Enum.TextXAlignment.Left
+flingStatus.Parent = hubScrolling
+
+FlingButton.MouseButton1Click:Connect(function()
+	flingStatus.Text = "Загружается..."
+	flingStatus.TextColor3 = Color3.fromRGB(255, 200, 100)
+	FlingButton.Text = "Загрузка..."
+	task.spawn(function()
+		local success, err = pcall(function()
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/K1LAS1K/Ultimate-Fling-GUI/main/flingscript.lua"))()
+		end)
+		if success then
+			flingStatus.Text = "Keyless"
+			flingStatus.TextColor3 = Color3.fromRGB(100, 200, 100)
+			FlingButton.Text = "Ultimate Fling GUI"
+		else
+			flingStatus.Text = "Ошибка: " .. tostring(err)
+			flingStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+			FlingButton.Text = "Ошибка"
+		end
+	end)
+end)
+
+-- Разделитель 6
+local Divider6 = Instance.new("Frame")
+Divider6.Size = UDim2.new(0, 260, 0, 1)
+Divider6.Position = UDim2.new(0, 10, 0, 406)
+Divider6.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Divider6.BorderSizePixel = 0
+Divider6.Parent = hubScrolling
+
+-- Кнопка Speed Hub X
+local SpeedHubButton = Instance.new("TextButton")
+SpeedHubButton.Name = "SpeedHubButton"
+SpeedHubButton.Size = UDim2.new(0, 260, 0, 36)
+SpeedHubButton.Position = UDim2.new(0, 10, 0, 412)
+SpeedHubButton.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+SpeedHubButton.BorderSizePixel = 0
+SpeedHubButton.Text = "Speed Hub X"
+SpeedHubButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpeedHubButton.TextSize = 15
+SpeedHubButton.Font = Enum.Font.GothamBold
+SpeedHubButton.Parent = hubScrolling
+
+local SHCorner = Instance.new("UICorner")
+SHCorner.CornerRadius = UDim.new(0, 4)
+SHCorner.Parent = SpeedHubButton
+
+local SHStroke = Instance.new("UIStroke")
+SHStroke.Color = Color3.fromRGB(220, 100, 100)
+SHStroke.Thickness = 1
+SHStroke.Parent = SpeedHubButton
+
+SpeedHubButton.MouseEnter:Connect(function()
+	SpeedHubButton.BackgroundColor3 = Color3.fromRGB(200, 80, 80)
+end)
+
+SpeedHubButton.MouseLeave:Connect(function()
+	SpeedHubButton.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+end)
+
+local shStatus = Instance.new("TextLabel")
+shStatus.Size = UDim2.new(0, 260, 0, 16)
+shStatus.Position = UDim2.new(0, 10, 0, 452)
+shStatus.BackgroundTransparency = 1
+shStatus.Text = "Needs Key"
+shStatus.TextColor3 = Color3.fromRGB(255, 180, 80)
+shStatus.TextSize = 11
+shStatus.Font = Enum.Font.Gotham
+shStatus.TextXAlignment = Enum.TextXAlignment.Left
+shStatus.Parent = hubScrolling
+
+SpeedHubButton.MouseButton1Click:Connect(function()
+	shStatus.Text = "Загружается..."
+	shStatus.TextColor3 = Color3.fromRGB(255, 200, 100)
+	SpeedHubButton.Text = "Загрузка..."
+	task.spawn(function()
+		local success, err = pcall(function()
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/AhmadV99/Speed-Hub-X/main/Speed%20Hub%20X.lua", true))()
+		end)
+		if success then
+			shStatus.Text = "Needs Key"
+			shStatus.TextColor3 = Color3.fromRGB(255, 180, 80)
+			SpeedHubButton.Text = "Speed Hub X"
+		else
+			shStatus.Text = "Ошибка: " .. tostring(err)
+			shStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+			SpeedHubButton.Text = "Ошибка"
+		end
+	end)
+end)
+
+-- Разделитель 7
+local Divider7 = Instance.new("Frame")
+Divider7.Size = UDim2.new(0, 260, 0, 1)
+Divider7.Position = UDim2.new(0, 10, 0, 474)
+Divider7.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Divider7.BorderSizePixel = 0
+Divider7.Parent = hubScrolling
+
+-- Кнопка Blox Fruits Tier 2
+local BFT2Button = Instance.new("TextButton")
+BFT2Button.Name = "BFT2Button"
+BFT2Button.Size = UDim2.new(0, 260, 0, 36)
+BFT2Button.Position = UDim2.new(0, 10, 0, 480)
+BFT2Button.BackgroundColor3 = Color3.fromRGB(0, 140, 140)
+BFT2Button.BorderSizePixel = 0
+BFT2Button.Text = "Blox Fruits Tier 2"
+BFT2Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+BFT2Button.TextSize = 15
+BFT2Button.Font = Enum.Font.GothamBold
+BFT2Button.Parent = hubScrolling
+
+local BFT2Corner = Instance.new("UICorner")
+BFT2Corner.CornerRadius = UDim.new(0, 4)
+BFT2Corner.Parent = BFT2Button
+
+local BFT2Stroke = Instance.new("UIStroke")
+BFT2Stroke.Color = Color3.fromRGB(0, 200, 200)
+BFT2Stroke.Thickness = 1
+BFT2Stroke.Parent = BFT2Button
+
+BFT2Button.MouseEnter:Connect(function()
+	BFT2Button.BackgroundColor3 = Color3.fromRGB(0, 160, 160)
+end)
+
+BFT2Button.MouseLeave:Connect(function()
+	BFT2Button.BackgroundColor3 = Color3.fromRGB(0, 140, 140)
+end)
+
+local bft2Status = Instance.new("TextLabel")
+bft2Status.Size = UDim2.new(0, 260, 0, 16)
+bft2Status.Position = UDim2.new(0, 10, 0, 520)
+bft2Status.BackgroundTransparency = 1
+bft2Status.Text = "Keyless"
+bft2Status.TextColor3 = Color3.fromRGB(100, 200, 100)
+bft2Status.TextSize = 11
+bft2Status.Font = Enum.Font.Gotham
+bft2Status.TextXAlignment = Enum.TextXAlignment.Left
+bft2Status.Parent = hubScrolling
+
+BFT2Button.MouseButton1Click:Connect(function()
+	bft2Status.Text = "Загружается..."
+	bft2Status.TextColor3 = Color3.fromRGB(255, 200, 100)
+	BFT2Button.Text = "Загрузка..."
+	task.spawn(function()
+		local success, err = pcall(function()
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/Dev-GravityHub/BloxFruit/refs/heads/main/Main.lua"))()
+		end)
+		if success then
+			bft2Status.Text = "Keyless"
+			bft2Status.TextColor3 = Color3.fromRGB(100, 200, 100)
+			BFT2Button.Text = "Blox Fruits Tier 2"
+		else
+			bft2Status.Text = "Ошибка: " .. tostring(err)
+			bft2Status.TextColor3 = Color3.fromRGB(255, 100, 100)
+			BFT2Button.Text = "Ошибка"
+		end
+	end)
+end)
+
+-- Разделитель 8
+local Divider8 = Instance.new("Frame")
+Divider8.Size = UDim2.new(0, 260, 0, 1)
+Divider8.Position = UDim2.new(0, 10, 0, 542)
+Divider8.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Divider8.BorderSizePixel = 0
+Divider8.Parent = hubScrolling
+
+-- Кнопка Blox Fruits Tier 1
+local BFT1Button = Instance.new("TextButton")
+BFT1Button.Name = "BFT1Button"
+BFT1Button.Size = UDim2.new(0, 260, 0, 36)
+BFT1Button.Position = UDim2.new(0, 10, 0, 548)
+BFT1Button.BackgroundColor3 = Color3.fromRGB(120, 60, 180)
+BFT1Button.BorderSizePixel = 0
+BFT1Button.Text = "Blox Fruits Tier 1"
+BFT1Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+BFT1Button.TextSize = 15
+BFT1Button.Font = Enum.Font.GothamBold
+BFT1Button.Parent = hubScrolling
+
+local BFT1Corner = Instance.new("UICorner")
+BFT1Corner.CornerRadius = UDim.new(0, 4)
+BFT1Corner.Parent = BFT1Button
+
+local BFT1Stroke = Instance.new("UIStroke")
+BFT1Stroke.Color = Color3.fromRGB(180, 100, 255)
+BFT1Stroke.Thickness = 1
+BFT1Stroke.Parent = BFT1Button
+
+BFT1Button.MouseEnter:Connect(function()
+	BFT1Button.BackgroundColor3 = Color3.fromRGB(140, 80, 200)
+end)
+
+BFT1Button.MouseLeave:Connect(function()
+	BFT1Button.BackgroundColor3 = Color3.fromRGB(120, 60, 180)
+end)
+
+local bft1Status = Instance.new("TextLabel")
+bft1Status.Size = UDim2.new(0, 260, 0, 16)
+bft1Status.Position = UDim2.new(0, 10, 0, 588)
+bft1Status.BackgroundTransparency = 1
+bft1Status.Text = "Needs Key"
+bft1Status.TextColor3 = Color3.fromRGB(255, 180, 80)
+bft1Status.TextSize = 11
+bft1Status.Font = Enum.Font.Gotham
+bft1Status.TextXAlignment = Enum.TextXAlignment.Left
+bft1Status.Parent = hubScrolling
+
+BFT1Button.MouseButton1Click:Connect(function()
+	bft1Status.Text = "Загружается..."
+	bft1Status.TextColor3 = Color3.fromRGB(255, 200, 100)
+	BFT1Button.Text = "Загрузка..."
+	task.spawn(function()
+		local success, err = pcall(function()
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/flazhy/QuantumOnyx/refs/heads/main/QuantumOnyx.lua"))("t.me/Cherruscript")
+		end)
+		if success then
+			bft1Status.Text = "Needs Key"
+			bft1Status.TextColor3 = Color3.fromRGB(255, 180, 80)
+			BFT1Button.Text = "Blox Fruits Tier 1"
+		else
+			bft1Status.Text = "Ошибка: " .. tostring(err)
+			bft1Status.TextColor3 = Color3.fromRGB(255, 100, 100)
+			BFT1Button.Text = "Ошибка"
+		end
+	end)
+end)
+
+-- Разделитель 9
+local Divider9 = Instance.new("Frame")
+Divider9.Size = UDim2.new(0, 260, 0, 1)
+Divider9.Position = UDim2.new(0, 10, 0, 610)
+Divider9.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Divider9.BorderSizePixel = 0
+Divider9.Parent = hubScrolling
+
+-- Кнопка Survive Zombie Arena
+local SZAButton = Instance.new("TextButton")
+SZAButton.Name = "SZAButton"
+SZAButton.Size = UDim2.new(0, 260, 0, 36)
+SZAButton.Position = UDim2.new(0, 10, 0, 616)
+SZAButton.BackgroundColor3 = Color3.fromRGB(50, 140, 50)
+SZAButton.BorderSizePixel = 0
+SZAButton.Text = "Survive Zombie Arena"
+SZAButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+SZAButton.TextSize = 14
+SZAButton.Font = Enum.Font.GothamBold
+SZAButton.Parent = hubScrolling
+
+local SZACorner = Instance.new("UICorner")
+SZACorner.CornerRadius = UDim.new(0, 4)
+SZACorner.Parent = SZAButton
+
+local SZAStroke = Instance.new("UIStroke")
+SZAStroke.Color = Color3.fromRGB(80, 200, 80)
+SZAStroke.Thickness = 1
+SZAStroke.Parent = SZAButton
+
+SZAButton.MouseEnter:Connect(function()
+	SZAButton.BackgroundColor3 = Color3.fromRGB(60, 160, 60)
+end)
+
+SZAButton.MouseLeave:Connect(function()
+	SZAButton.BackgroundColor3 = Color3.fromRGB(50, 140, 50)
+end)
+
+local szaStatus = Instance.new("TextLabel")
+szaStatus.Size = UDim2.new(0, 260, 0, 16)
+szaStatus.Position = UDim2.new(0, 10, 0, 656)
+szaStatus.BackgroundTransparency = 1
+szaStatus.Text = "Keyless"
+szaStatus.TextColor3 = Color3.fromRGB(100, 200, 100)
+szaStatus.TextSize = 11
+szaStatus.Font = Enum.Font.Gotham
+szaStatus.TextXAlignment = Enum.TextXAlignment.Left
+szaStatus.Parent = hubScrolling
+
+SZAButton.MouseButton1Click:Connect(function()
+	szaStatus.Text = "Загружается..."
+	szaStatus.TextColor3 = Color3.fromRGB(255, 200, 100)
+	SZAButton.Text = "Загрузка..."
+	task.spawn(function()
+		local success, err = pcall(function()
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/SharkCreepy/Survive-Zombie-Arena/refs/heads/main/script.luao"))()
+		end)
+		if success then
+			szaStatus.Text = "Keyless"
+			szaStatus.TextColor3 = Color3.fromRGB(100, 200, 100)
+			SZAButton.Text = "Survive Zombie Arena"
+		else
+			szaStatus.Text = "Ошибка: " .. tostring(err)
+			szaStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+			SZAButton.Text = "Ошибка"
+		end
+	end)
+end)
+
+hubScrolling.CanvasSize = UDim2.new(0, 0, 0, 680)
+
+tabs["Hub"].button.MouseButton1Click:Connect(function()
+	switchTab("Hub")
+end)
+
+-- ==================== ЗАПУСК ====================
+switchTab("Hub")
